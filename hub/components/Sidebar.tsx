@@ -1,9 +1,9 @@
 
 import React from 'react';
-import { NavTab } from '../types';
-import { 
-  FolderKanban, 
-  Settings, 
+import { NavTab } from '../../types';
+import {
+  FolderKanban,
+  Settings,
   LogOut,
   Zap,
   GitBranch,
@@ -36,11 +36,10 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
           <button
             key={item.id}
             onClick={() => setActiveTab(item.id)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group ${
-              activeTab === item.id 
-                ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shadow-[0_0_20px_rgba(6,182,212,0.1)]' 
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group ${activeTab === item.id
+                ? 'bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shadow-[0_0_20px_rgba(6,182,212,0.1)]'
                 : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-100'
-            }`}
+              }`}
           >
             <item.icon size={18} className={activeTab === item.id ? 'text-cyan-400' : 'group-hover:text-slate-100'} />
             <span className="font-medium tracking-wide text-sm">{item.label}</span>

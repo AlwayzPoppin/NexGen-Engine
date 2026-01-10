@@ -73,10 +73,40 @@ export interface GameEntity2D {
     linkedLogicId?: string;
 }
 
+export interface QuestObjective {
+    id: string;
+    text: string;
+    description?: string;
+    status: 'Pending' | 'Active' | 'Completed' | 'Failed';
+    isOptional?: boolean;
+}
+
+export interface Quest {
+    id: string;
+    title: string;
+    description: string;
+    status: 'Available' | 'Active' | 'Completed' | 'Failed';
+    type: 'Main' | 'Side' | 'World' | 'Hidden';
+    objectives: QuestObjective[];
+    rewards?: { type: string; amount: number; label: string }[];
+    linkedAssetId?: string;
+}
+
+export interface NarrativeSegment {
+    id: string;
+    speaker: string;
+    content: string;
+    mood?: string;
+    choices?: { text: string; nextSegmentId: string }[];
+    linkedAssetId?: string;
+}
+
 export interface GlobalGameState {
     entities: GameEntity2D[];
-    nodes: GenesisNode[]; // Updated from NodePos
+    nodes: GenesisNode[];
     wires: WireConnection[];
+    quests: Quest[];
+    narrativeSegments: NarrativeSegment[];
 }
 
 export interface NexusAsset {

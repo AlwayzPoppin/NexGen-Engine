@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Project, NavTab } from '../types';
+import { Project, NavTab } from '../../types';
 import { Plus, Search, Filter, FolderOpen, MoreVertical, Clock, ExternalLink, Trash2 } from 'lucide-react';
 
 interface ProjectsProps {

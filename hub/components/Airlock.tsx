@@ -21,7 +21,7 @@ import {
     Settings,
     Globe
 } from 'lucide-react';
-import { GlobalGameState, NexusAsset } from '../types';
+import { GlobalGameState, NexusAsset } from '../../types';
 
 interface AirlockProps {
     projectName?: string;

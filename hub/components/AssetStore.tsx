@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { Asset } from '../types';
+import { Asset } from '../../types';
 import { ShoppingCart, Star, Tag, Download, Eye } from 'lucide-react';
 
 const mockAssets: Asset[] = [
@@ -18,9 +18,9 @@ const AssetStore: React.FC = () => {
   return (
     <div className="space-y-8 animate-in zoom-in-95 duration-500">
       <div className="relative h-64 rounded-3xl overflow-hidden group">
-        <img 
-          src="https://picsum.photos/1200/400?seed=hero" 
-          alt="Featured Asset" 
+        <img
+          src="https://picsum.photos/1200/400?seed=hero"
+          alt="Featured Asset"
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
         />
         <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/40 to-transparent flex flex-col justify-center p-12">
@@ -42,7 +42,7 @@ const AssetStore: React.FC = () => {
         <h3 className="text-xl font-bold">Trending Assets</h3>
         <div className="flex gap-2">
           {['All', '3D Models', 'Materials', 'Audio', 'Scripts'].map((cat, i) => (
-            <button 
+            <button
               key={i}
               className={`px-4 py-2 rounded-lg text-sm transition-colors ${i === 0 ? 'bg-cyan-500 text-white' : 'bg-slate-900 border border-slate-800 text-slate-400 hover:bg-slate-800'}`}
             >
@@ -56,9 +56,9 @@ const AssetStore: React.FC = () => {
         {mockAssets.map((asset) => (
           <div key={asset.id} className="group glass-panel rounded-2xl border border-slate-800 overflow-hidden flex flex-col hover:border-slate-700 transition-all">
             <div className="relative aspect-[4/3] overflow-hidden">
-              <img 
-                src={asset.image} 
-                alt={asset.name} 
+              <img
+                src={asset.image}
+                alt={asset.name}
                 className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
               />
               <div className="absolute inset-0 bg-slate-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-3">
@@ -73,14 +73,14 @@ const AssetStore: React.FC = () => {
                 {asset.type}
               </div>
             </div>
-            
+
             <div className="p-4 flex-1">
               <h4 className="font-bold text-slate-100 mb-1 truncate">{asset.name}</h4>
               <div className="flex items-center gap-1 text-amber-400 mb-4">
                 <Star size={14} fill="currentColor" />
                 <span className="text-xs font-bold">{asset.rating}</span>
               </div>
-              
+
               <div className="flex items-center justify-between pt-4 border-t border-slate-800">
                 <span className="text-lg font-bold text-cyan-400">{asset.price}</span>
                 <button className="p-2 text-slate-400 hover:text-emerald-400 transition-colors">

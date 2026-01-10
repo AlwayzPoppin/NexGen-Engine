@@ -29,7 +29,7 @@ import {
     Music,
     BrainCircuit
 } from 'lucide-react';
-import { GlobalGameState, GameEntity2D } from '../types';
+import { GlobalGameState, GameEntity2D } from '../../types';
 
 // --- RUNTIME SIMULATION ---
 const GameCanvas: React.FC<{ gameState: GlobalGameState; isPlaying: boolean }> = ({ gameState, isPlaying }) => {

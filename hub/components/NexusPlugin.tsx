@@ -91,10 +91,16 @@ import {
   Link as LinkIcon,
   Headphones,
   Music2,
-  Ear
+  Ear,
+  Radio,
+  Send,
+  X,
+  Bot,
+  Settings,
+  EyeOff
 } from 'lucide-react';
 import { NexusModule, NexusAsset, NexusMetaVariable, GameEntity2D, GlobalGameState, GenesisNode } from '../../types';
-import { generateSprite, generateAudioSignal } from '../services/geminiService';
+import { generateSprite, generateAudioSignal, generateLivePerformance, generateAtmosphericTrack, generateAssistantResponse } from '../services/geminiService';
 import NovaEngine from './NovaEngine';
 import AtlasUI from './AtlasUI';
 import Airlock from './Airlock';
@@ -103,9 +109,9 @@ import Airlock from './Airlock';
 // NodePos moved to types.ts
 
 
-type GenesisTab = 'QUEST' | 'LOGIC' | 'DEPLOY';
+type GenesisTab = 'QUEST' | 'LOGIC';
 type SynapseTab = 'GENERATOR' | 'EDITOR' | 'ANIMATOR' | 'RIGGING';
-type EchoTab = 'SIGNAL_GEN' | 'WAVE_EDIT' | 'FX_FORGE';
+type EchoTab = 'SIGNAL_GEN' | 'WAVE_EDIT' | 'FX_FORGE' | 'LIVE_PERFORMANCE' | 'OST_COMPOSE';
 type AudioCategory = 'DIALOGUE' | 'SFX' | 'MUSIC' | 'AMBIENT';
 type SpriteStyle = 'Pixel Art' | 'Vector Flat' | 'Hand Drawn' | 'Cyberpunk/Neon' | 'Isometric';
 
@@ -122,9 +128,11 @@ interface AssetCardProps {
   setEditNameValue: (s: string) => void;
   startEdit: () => void;
   saveEdit: () => void;
+  onSendToSynapse?: () => void;
+  onSendToEcho?: () => void;
 }
 
-const AssetCard: React.FC<AssetCardProps> = ({ asset, isEditing, editNameValue, setEditNameValue, startEdit, saveEdit }) => {
+const AssetCard: React.FC<AssetCardProps> = ({ asset, isEditing, editNameValue, setEditNameValue, startEdit, saveEdit, onSendToSynapse, onSendToEcho }) => {
   const [previewSrc, setPreviewSrc] = useState<string | null>(asset.previewUrl || null);
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -203,6 +211,28 @@ const AssetCard: React.FC<AssetCardProps> = ({ asset, isEditing, editNameValue, 
         <div className={`w-1.5 h-1.5 rounded-full ${asset.status === 'Linked' ? 'bg-emerald-500' : 'bg-red-500'}`} />
         <span className="text-[8px] font-black uppercase tracking-widest text-slate-500">{asset.status}</span>
       </div>
+
+      {/* Action Buttons */}
+      <div className="flex gap-2 mt-3 opacity-0 group-hover/item:opacity-100 transition-opacity">
+        {asset.type === 'Sprite' && onSendToSynapse && (
+          <button
+            onClick={onSendToSynapse}
+            className="flex-1 py-2 bg-cyan-500/10 border border-cyan-500/20 rounded-xl text-[8px] font-black uppercase text-cyan-400 hover:bg-cyan-500/20 transition-all flex items-center justify-center gap-1"
+            title="Send to Synapse for editing"
+          >
+            <Paintbrush size={10} /> Synapse
+          </button>
+        )}
+        {asset.type === 'Audio' && onSendToEcho && (
+          <button
+            onClick={onSendToEcho}
+            className="flex-1 py-2 bg-pink-500/10 border border-pink-500/20 rounded-xl text-[8px] font-black uppercase text-pink-400 hover:bg-pink-500/20 transition-all flex items-center justify-center gap-1"
+            title="Send to Echo for editing"
+          >
+            <Volume2 size={10} /> Echo
+          </button>
+        )}
+      </div>
     </div>
   );
 };
@@ -250,6 +280,66 @@ const NexusPlugin: React.FC = () => {
     { key: 'is_in_combat', value: 'False', type: 'System' }
   ];
 
+  // ECHO: AI Audio Expansion State
+  const [livePersona, setLivePersona] = useState('Decaying Zombie');
+  const [liveDirectives, setLiveDirectives] = useState(['Moan', 'Snarl', 'Rasp']);
+  const [ostParams, setOstParams] = useState({ bpm: 120, density: 50, brightness: 50 });
+  const [isForgingOst, setIsForgingOst] = useState(false);
+
+  // AI Assistant State
+  const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
+  const [aiMessages, setAiMessages] = useState<{ role: 'user' | 'model', content: string }[]>([]);
+  const [aiInput, setAiInput] = useState('');
+  const [isAiThinking, setIsAiThinking] = useState(false);
+
+  // AI Deep Context State
+  const [aiDeepContext, setAiDeepContext] = useState<{
+    gameConfig: any | null;
+    assetSummaries: string[];
+    isSyncing: boolean;
+    lastSyncTime: Date | null;
+  }>({
+    gameConfig: null,
+    assetSummaries: [],
+    isSyncing: false,
+    lastSyncTime: null,
+  });
+
+  // AI File Editing State
+  const [pendingFileEdits, setPendingFileEdits] = useState<{
+    filePath: string;
+    fileName: string;
+    originalContent: string;
+    suggestedContent: string;
+    timestamp: Date;
+  }[]>([]);
+  const [isDiffPanelOpen, setIsDiffPanelOpen] = useState(false);
+  const [activeDiffIndex, setActiveDiffIndex] = useState(0);
+
+  // Settings State
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [apiKeyInput, setApiKeyInput] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [savedApiKey, setSavedApiKey] = useState<string | null>(null);
+
+  // Load API key from localStorage on mount
+  useEffect(() => {
+    const storedKey = localStorage.getItem('nexgen_api_key');
+    if (storedKey) {
+      setSavedApiKey(storedKey);
+      setApiKeyInput(storedKey);
+    }
+  }, []);
+
+  const handleSaveApiKey = () => {
+    if (apiKeyInput.trim()) {
+      localStorage.setItem('nexgen_api_key', apiKeyInput.trim());
+      setSavedApiKey(apiKeyInput.trim());
+      // Update the environment variable for the current session
+      (window as any).__NEXGEN_API_KEY__ = apiKeyInput.trim();
+    }
+  };
+
   // Constants for the Coordinate System
   const BOARD_SIZE = 8000;
   const CENTER = BOARD_SIZE / 2;
@@ -271,7 +361,9 @@ const NexusPlugin: React.FC = () => {
         inputs: [],
         outputs: [{ id: 'out_exec', name: '', type: 'Exec', direction: 'Output' }]
       }
-    ]
+    ],
+    quests: [],
+    narrativeSegments: []
   });
 
   // Dragging & Navigation State
@@ -514,6 +606,115 @@ const NexusPlugin: React.FC = () => {
 
   const handleNeuralOrchestration = async () => {
     setIsOrchestrating(true);
+
+    // PHASE 2: Logic Engine Generation
+    // Only generate nodes for assets that are 'Linked' (meaning they've been processed/readied in Assembler)
+    // but not yet in the graph, OR process all Unlinked assets if that's the goal.
+    // Based on user feedback: "auto link in the assembler first then auto link in logic engine"
+    const readyAssets = assets.filter(a => a.status === 'Linked' && a.statusReason?.includes('Neural'));
+
+    // However, to be most useful, let's treat "Generate from Assets" in logic engine 
+    // as the step that takes the assets identified in Assembler and puts them on the board.
+
+    const unlinkedAssets = assets.filter(a => a.status === 'Unlinked');
+    const assetsToProcess = unlinkedAssets.length > 0 ? unlinkedAssets : readyAssets;
+
+    const newNodes = assetsToProcess.map((asset, index) => {
+      const col = index % 5;
+      const row = Math.floor(index / 5);
+
+      const nodeType = asset.type === 'Sprite' ? 'Action' : (asset.type === 'Audio' ? 'Echo' : 'Data');
+      const label = asset.type === 'Sprite' ? `Load Sprite: ${asset.name}` : (asset.type === 'Audio' ? `Play Sound: ${asset.name}` : `Asset: ${asset.name}`);
+      const colorClass = asset.type === 'Sprite' ? 'border-cyan-500/40 bg-cyan-500/10' : (asset.type === 'Audio' ? 'border-pink-500/40 bg-pink-500/10' : 'border-slate-500/40 bg-slate-500/10');
+
+      return {
+        id: `node_gen_${asset.id}`,
+        x: CENTER + (col * 300) - 600,
+        y: CENTER + (row * 200) + 300,
+        label,
+        type: nodeType,
+        inputs: [{ id: 'in_exec', name: '', type: 'Exec', direction: 'Input' }],
+        outputs: [{ id: 'out_exec', name: '', type: 'Exec', direction: 'Output' }],
+        data: asset.name,
+        colorClass
+      };
+    });
+    if (newNodes.length > 0) {
+      setGameState(prev => ({
+        ...prev,
+        nodes: [...prev.nodes, ...newNodes]
+      }));
+
+      // Update assets to linked
+      setAssets(prev => prev.map(a =>
+        assetsToProcess.find(ua => ua.id === a.id)
+          ? { ...a, status: 'Linked', statusReason: 'Auto-Generated by Neural Orchestration' }
+          : a
+      ));
+    }
+
+    setTimeout(() => {
+      setIsOrchestrating(false);
+      // Auto-focus on new nodes
+      if (containerRef.current && newNodes.length > 0) {
+        containerRef.current.scrollTo({
+          left: newNodes[0].x - containerRef.current.clientWidth / 2,
+          top: newNodes[0].y - containerRef.current.clientHeight / 2,
+          behavior: 'smooth'
+        });
+      }
+    }, 1500);
+  };
+
+  const handleQuestAutoSync = async () => {
+    setIsOrchestrating(true);
+
+    // Identify unlinked 'Data' or 'Logic' assets that might be Quests or Narrative
+    const unlinkedAssets = assets.filter(a => a.status === 'Unlinked' && (a.type === 'Data' || a.type === 'Logic'));
+
+    const newQuests = [];
+    const newNarratives = [];
+
+    unlinkedAssets.forEach(asset => {
+      // Simple heuristic: if filename contains 'quest' it's a quest, else it's narrative
+      if (asset.name.toLowerCase().includes('quest')) {
+        newQuests.push({
+          id: `q_sync_${asset.id}`,
+          title: asset.name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " "),
+          description: `Auto-synced from asset: ${asset.path}`,
+          status: 'Available',
+          type: 'Side',
+          objectives: [
+            { id: `obj_${asset.id}_1`, text: 'Locate asset data', status: 'Pending' }
+          ],
+          linkedAssetId: asset.id
+        });
+      } else {
+        newNarratives.push({
+          id: `n_sync_${asset.id}`,
+          speaker: "System AI",
+          content: `Data stream initiated from ${asset.name}. Analyzing neural patterns...`,
+          linkedAssetId: asset.id
+        });
+      }
+    });
+
+    if (newQuests.length > 0 || newNarratives.length > 0) {
+      setGameState(prev => ({
+        ...prev,
+        quests: [...(prev.quests || []), ...newQuests],
+        narrativeSegments: [...(prev.narrativeSegments || []), ...newNarratives]
+      }));
+
+      // Update assets to linked
+      const processedIds = unlinkedAssets.map(a => a.id);
+      setAssets(prev => prev.map(a =>
+        processedIds.includes(a.id)
+          ? { ...a, status: 'Linked', statusReason: 'Synced to Genesis Core' }
+          : a
+      ));
+    }
+
     setTimeout(() => setIsOrchestrating(false), 1500);
   };
 
@@ -543,13 +744,330 @@ const NexusPlugin: React.FC = () => {
     setIsGeneratingAudio(true);
     try {
       const context = isContextBound ? { assets, variables: projectVariables } : undefined;
-      const audioUrl = await generateAudioSignal(echoPrompt, echoCategory, echoVoice, context as any);
+      // Enhanced with "Steerable" prompt logic
+      const enhancedPrompt = echoCategory === 'DIALOGUE'
+        ? `${echoPrompt} // PERFORMANCE_DIRECTION: ${echoVoice === 'Kore' ? 'Neutral/Clear' : echoVoice}`
+        : echoPrompt;
+      const audioUrl = await generateAudioSignal(enhancedPrompt, echoCategory, echoVoice, context as any);
       setGeneratedAudio(audioUrl);
     } catch (e) {
       console.error(e);
     } finally {
       setIsGeneratingAudio(false);
     }
+  };
+
+  const handleCallToStage = async () => {
+    setIsGeneratingAudio(true);
+    try {
+      const response = await generateLivePerformance(livePersona, "Session Start");
+      setGeneratedAudio(response);
+      // Logic for terminal logs would go here
+    } finally {
+      setIsGeneratingAudio(false);
+    }
+  };
+
+  const handleForgeOst = async () => {
+    setIsForgingOst(true);
+    try {
+      const response = await generateAtmosphericTrack("OST Forge Sample", ostParams);
+      // In a real impl, we'd set this to a wave preview
+      setGeneratedAudio(response);
+    } finally {
+      setIsForgingOst(false);
+    }
+  };
+
+  // AI Deep Context Sync - Reads asset contents and looks for game config
+  const handleSyncContext = async () => {
+    setAiDeepContext(prev => ({ ...prev, isSyncing: true }));
+
+    try {
+      const summaries: string[] = [];
+
+      // Read asset file contents (first 300 chars each)
+      for (const asset of assets.slice(0, 20)) { // Limit to first 20 assets
+        if (asset.handle) {
+          try {
+            const file = await asset.handle.getFile();
+            if (file.type.startsWith('text/') || file.name.endsWith('.json') || file.name.endsWith('.nx')) {
+              const text = await file.text();
+              const preview = text.slice(0, 300).replace(/\n/g, ' ');
+              summaries.push(`[${asset.type}] ${asset.name}: ${preview}...`);
+            } else {
+              summaries.push(`[${asset.type}] ${asset.name}: (binary file, ${Math.round(file.size / 1024)}KB)`);
+            }
+          } catch (e) {
+            summaries.push(`[${asset.type}] ${asset.name}: (could not read)`);
+          }
+        }
+      }
+
+      // Look for game_context.json FIRST (priority), then fallback to other configs
+      let gameConfig = null;
+      let configType = '';
+
+      // Priority order: game_context.json > game.json > config.json > project.json > nexgen_project.json
+      const configAsset = assets.find(a => a.name.toLowerCase() === 'game_context.json') ||
+        assets.find(a => a.name.toLowerCase() === 'game.json') ||
+        assets.find(a => a.name.toLowerCase() === 'config.json') ||
+        assets.find(a => a.name.toLowerCase() === 'project.json') ||
+        assets.find(a => a.name.toLowerCase() === 'nexgen_project.json');
+
+      if (configAsset?.handle) {
+        try {
+          const file = await configAsset.handle.getFile();
+          const text = await file.text();
+          gameConfig = JSON.parse(text);
+          configType = configAsset.name;
+        } catch (e) {
+          console.log('Could not parse config file');
+        }
+      }
+
+      setAiDeepContext({
+        gameConfig,
+        assetSummaries: summaries,
+        isSyncing: false,
+        lastSyncTime: new Date(),
+      });
+
+      // Build informative sync message
+      let syncMessage = `✅ **Context Synced!** I now have deep access to ${summaries.length} assets.`;
+      if (gameConfig) {
+        syncMessage += `\n\n📖 **Loaded Game Bible:** \`${configType}\``;
+        if (gameConfig.game?.title) {
+          syncMessage += `\n- **Game:** ${gameConfig.game.title}`;
+        }
+        if (gameConfig.story?.premise) {
+          syncMessage += `\n- **Premise:** ${gameConfig.story.premise.slice(0, 100)}...`;
+        }
+        if (gameConfig.characters?.recruits?.length) {
+          syncMessage += `\n- **Characters:** ${gameConfig.characters.recruits.map((r: any) => r.name).join(', ')}`;
+        }
+      }
+      syncMessage += '\n\nAsk me anything about your project!';
+
+      setAiMessages(prev => [...prev, {
+        role: 'model',
+        content: syncMessage
+      }]);
+
+    } catch (e) {
+      console.error('Sync error:', e);
+      setAiDeepContext(prev => ({ ...prev, isSyncing: false }));
+    }
+  };
+
+  // AI Assistant Handler
+  const handleAiSubmit = async () => {
+    if (!aiInput.trim()) return;
+
+    const userMessage = aiInput.trim();
+    setAiMessages(prev => [...prev, { role: 'user', content: userMessage }]);
+    setAiInput('');
+    setIsAiThinking(true);
+
+    try {
+      // Build enhanced context with deep context if available
+      const enhancedContext = {
+        assets,
+        gameState,
+        activeModule,
+        projectVariables,
+        // Add deep context if synced
+        ...(aiDeepContext.lastSyncTime && {
+          gameConfig: aiDeepContext.gameConfig,
+          assetSummaries: aiDeepContext.assetSummaries.slice(0, 10), // Limit for token size
+        }),
+      };
+
+      const response = await generateAssistantResponse(userMessage, enhancedContext);
+
+      // Check for file edit suggestions in response
+      const fileEdits = parseFileEdits(response || '');
+      if (fileEdits.length > 0) {
+        for (const edit of fileEdits) {
+          await handleFileEditSuggestion(edit.filePath, edit.content);
+        }
+        // Remove FILE_EDIT blocks from displayed message
+        const cleanResponse = (response || '').replace(/<FILE_EDIT[\s\S]*?<\/FILE_EDIT>/g, '').trim();
+        setAiMessages(prev => [...prev, { role: 'model', content: cleanResponse || 'I\'ve prepared file changes for your review.' }]);
+      } else {
+        setAiMessages(prev => [...prev, { role: 'model', content: response || 'I encountered an issue. Please try again.' }]);
+      }
+
+      // Check for navigation keywords in the response
+      const moduleKeywords: Record<string, NexusModule> = {
+        'assembler': 'ASSEMBLER',
+        'synapse': 'SYNAPSE',
+        'echo': 'ECHO',
+        'genesis': 'GENESIS',
+        'atlas': 'ATLAS',
+        'nova': 'NOVA',
+        'airlock': 'AIRLOCK',
+      };
+
+      // Auto-detect if AI mentioned navigating to a module
+      const lowerResponse = (response || '').toLowerCase();
+      for (const [keyword, module] of Object.entries(moduleKeywords)) {
+        if (lowerResponse.includes(`navigate to ${keyword}`) || lowerResponse.includes(`go to ${keyword}`) || lowerResponse.includes(`take you to ${keyword}`)) {
+          // Add a follow-up message with navigation button
+          setAiMessages(prev => [...prev, {
+            role: 'model',
+            content: `__NAV__${module}`
+          }]);
+          break;
+        }
+      }
+    } catch (e) {
+      console.error('AI Assistant Error:', e);
+      setAiMessages(prev => [...prev, { role: 'model', content: 'Sorry, I encountered an error. Please try again.' }]);
+    } finally {
+      setIsAiThinking(false);
+    }
+  };
+
+  // Parse AI response for file edit suggestions
+  const parseFileEdits = (response: string): { filePath: string; content: string }[] => {
+    const edits: { filePath: string; content: string }[] = [];
+    const regex = /<FILE_EDIT\s+path="([^"]+)">([\s\S]*?)<\/FILE_EDIT>/g;
+    let match;
+    while ((match = regex.exec(response)) !== null) {
+      edits.push({ filePath: match[1], content: match[2].trim() });
+    }
+    return edits;
+  };
+
+  // Handle file edit from AI response
+  const handleFileEditSuggestion = async (filePath: string, suggestedContent: string) => {
+    try {
+      // Try to get original content from synced assets
+      const asset = assets.find(a => a.path?.includes(filePath) || a.name === filePath);
+      let originalContent = '';
+
+      if (asset && aiDeepContext.assetSummaries.length > 0) {
+        // Find in summaries
+        const summary = aiDeepContext.assetSummaries.find(s => s.includes(filePath));
+        if (summary) {
+          originalContent = summary.split('\n').slice(1).join('\n');
+        }
+      }
+
+      // If we have gameConfig and it's that file
+      if (filePath.includes('game_context.json') && aiDeepContext.gameConfig) {
+        originalContent = JSON.stringify(aiDeepContext.gameConfig, null, 2);
+      }
+
+      const fileName = filePath.split('/').pop() || filePath;
+
+      setPendingFileEdits(prev => [...prev, {
+        filePath,
+        fileName,
+        originalContent,
+        suggestedContent,
+        timestamp: new Date()
+      }]);
+
+      // Notify user about pending edit
+      setAiMessages(prev => [...prev, {
+        role: 'model',
+        content: `__FILE_EDIT__${filePath}`
+      }]);
+
+    } catch (e) {
+      console.error('Error processing file edit:', e);
+    }
+  };
+
+  // Generate simple unified diff
+  const generateDiff = (original: string, modified: string, fileName: string): string => {
+    const originalLines = original.split('\n');
+    const modifiedLines = modified.split('\n');
+    let diff = `--- a/${fileName}\n+++ b/${fileName}\n`;
+
+    const maxLines = Math.max(originalLines.length, modifiedLines.length);
+    let context = [];
+    let changes = [];
+
+    for (let i = 0; i < maxLines; i++) {
+      const origLine = originalLines[i] || '';
+      const modLine = modifiedLines[i] || '';
+
+      if (origLine === modLine) {
+        if (changes.length > 0) {
+          // Output accumulated changes
+          diff += `@@ -${Math.max(1, i - changes.length - 2)} +${Math.max(1, i - changes.length - 2)} @@\n`;
+          diff += context.map(l => ` ${l}`).join('\n') + '\n';
+          diff += changes.join('\n') + '\n';
+          context = [];
+          changes = [];
+        }
+        context.push(origLine);
+        if (context.length > 3) context.shift();
+      } else {
+        if (origLine && !modifiedLines.includes(origLine)) {
+          changes.push(`-${origLine}`);
+        }
+        if (modLine && !originalLines.includes(modLine)) {
+          changes.push(`+${modLine}`);
+        }
+      }
+    }
+
+    // Output remaining changes
+    if (changes.length > 0) {
+      diff += `@@ -${Math.max(1, maxLines - changes.length)} +${Math.max(1, maxLines - changes.length)} @@\n`;
+      diff += context.map(l => ` ${l}`).join('\n') + '\n';
+      diff += changes.join('\n') + '\n';
+    }
+
+    return diff;
+  };
+
+  // Download diff as file
+  const handleDownloadDiff = (index: number) => {
+    const edit = pendingFileEdits[index];
+    if (!edit) return;
+
+    const diff = generateDiff(edit.originalContent, edit.suggestedContent, edit.fileName);
+    const blob = new Blob([diff], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${edit.fileName}.diff`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Apply changes (would need IPC in real app)
+  const handleApplyChanges = async (index: number) => {
+    const edit = pendingFileEdits[index];
+    if (!edit) return;
+
+    // In a real Electron app, this would use IPC to write the file
+    // For now, we'll download the new content
+    const blob = new Blob([edit.suggestedContent], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = edit.fileName;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    // Remove from pending
+    setPendingFileEdits(prev => prev.filter((_, i) => i !== index));
+
+    setAiMessages(prev => [...prev, {
+      role: 'model',
+      content: `✅ Downloaded updated **${edit.fileName}**. Replace the original file with this version to apply changes.`
+    }]);
+  };
+
+  // Dismiss pending edit
+  const handleDismissEdit = (index: number) => {
+    setPendingFileEdits(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleSaveToAssembler = () => {
@@ -875,7 +1393,7 @@ const NexusPlugin: React.FC = () => {
             <p className="text-[10px] text-slate-500 font-black tracking-[0.4em] uppercase mt-2">Neural Signal Synthesis and Mastering Lab</p>
           </div>
           <div className="flex items-center gap-4">
-            {['SIGNAL_GEN', 'WAVE_EDIT', 'FX_FORGE'].map((tab) => (
+            {['SIGNAL_GEN', 'LIVE_PERFORMANCE', 'OST_COMPOSE', 'WAVE_EDIT', 'FX_FORGE'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setEchoTab(tab as EchoTab)}
@@ -891,6 +1409,156 @@ const NexusPlugin: React.FC = () => {
         </div>
 
         <div className="flex-1 min-h-0">
+          {echoTab === 'LIVE_PERFORMANCE' && (
+            <div className="h-full flex gap-8 animate-in slide-in-from-bottom-4 duration-700">
+              {/* Director's Booth Toolset */}
+              <div className="w-80 flex flex-col gap-6">
+                <div className="glass-panel p-6 rounded-3xl border border-pink-500/20 bg-pink-500/5 space-y-6">
+                  <h3 className="text-xs font-black text-pink-400 uppercase tracking-widest flex items-center gap-2"><Radio size={14} /> Director's Booth</h3>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-500 uppercase">Active Persona</label>
+                    <input
+                      value={livePersona}
+                      onChange={e => setLivePersona(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-white font-bold focus:outline-none focus:border-pink-500/50"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-500 uppercase">Directorial Overlays</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {liveDirectives.map(d => (
+                        <button key={d} className="py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-[10px] font-bold text-slate-400 hover:text-pink-400 hover:border-pink-500/30 transition-all uppercase">{d}</button>
+                      ))}
+                      <button className="py-2.5 bg-slate-900/40 border border-slate-800 border-dashed rounded-xl text-[10px] font-bold text-slate-600 flex items-center justify-center gap-1"><Plus size={10} /> ADD</button>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleCallToStage}
+                    disabled={isGeneratingAudio}
+                    className="w-full py-4 bg-pink-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 hover:bg-pink-500 transition-all disabled:opacity-50"
+                  >
+                    {isGeneratingAudio ? <RefreshCcw size={18} className="animate-spin" /> : <Mic size={18} />} Call to Stage
+                  </button>
+                </div>
+
+                <div className="glass-panel p-6 rounded-3xl border border-slate-800 bg-slate-900/10 space-y-4">
+                  <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Performance Logs</h4>
+                  <div className="space-y-2 h-40 overflow-y-auto custom-scrollbar pr-2">
+                    <p className="text-[9px] font-mono text-slate-600 uppercase border-l border-slate-800 pl-3 py-1">[ACTOR] Connected to Gemini-Live-3</p>
+                    <p className="text-[9px] font-mono text-slate-600 uppercase border-l border-slate-800 pl-3 py-1">[DIRECTOR] Awaiting first prompt...</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* The "Stage" */}
+              <div className="flex-1 glass-panel rounded-[2.5rem] border border-slate-800 bg-slate-950/40 flex flex-col items-center justify-center relative overflow-hidden">
+                <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundImage: 'radial-gradient(circle at center, #ec4899 0%, transparent 70%)' }} />
+
+                <div className="z-10 text-center space-y-8">
+                  <div className="relative w-48 h-48 mx-auto">
+                    <div className="absolute inset-0 rounded-full border border-pink-500/20 animate-ping duration-[3000ms]" />
+                    <div className="absolute inset-4 rounded-full border-2 border-pink-500/40 animate-pulse" />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <BrainCircuit size={64} className="text-pink-500" />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <h2 className="text-2xl font-black text-white uppercase tracking-tighter">Stage: {livePersona}</h2>
+                    <p className="text-xs text-slate-500 font-mono uppercase tracking-[0.2em]">Bidi-Stream Active // Latency: 42ms</p>
+                  </div>
+                  <div className="flex items-center justify-center gap-4">
+                    <div className="flex gap-[2px] h-8 items-center">
+                      {[...Array(12)].map((_, i) => (
+                        <div key={i} className="w-1 bg-pink-500 rounded-full animate-pulse" style={{ height: `${20 + Math.random() * 80}%`, animationDelay: `${i * 100}ms` }} />
+                      ))}
+                    </div>
+                    <span className="text-[10px] font-black text-pink-500 uppercase tracking-widest">Actor Output</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {echoTab === 'OST_COMPOSE' && (
+            <div className="h-full flex gap-8 animate-in slide-in-from-right-4 duration-700">
+              {/* Sonic Forge Controls */}
+              <div className="w-1/3 flex flex-col gap-6">
+                <div className="glass-panel p-8 rounded-[2.5rem] border border-cyan-500/20 bg-cyan-500/5 space-y-8">
+                  <header className="flex items-center justify-between">
+                    <h3 className="text-sm font-black text-cyan-400 uppercase tracking-widest flex items-center gap-2"><Music2 size={18} /> Sonic Forge</h3>
+                    <Sparkles size={18} className="text-cyan-400 animate-pulse" />
+                  </header>
+
+                  <div className="space-y-6">
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Tempo (BPM)</label>
+                        <span className="text-xs font-mono text-cyan-400 font-bold">{ostParams.bpm}</span>
+                      </div>
+                      <input type="range" min="40" max="220" value={ostParams.bpm} onChange={e => setOstParams({ ...ostParams, bpm: parseInt(e.target.value) })} className="w-full accent-cyan-500 h-1 bg-slate-900 rounded-full" />
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Density</label>
+                        <span className="text-xs font-mono text-cyan-400 font-bold">{ostParams.density}%</span>
+                      </div>
+                      <input type="range" min="0" max="100" value={ostParams.density} onChange={e => setOstParams({ ...ostParams, density: parseInt(e.target.value) })} className="w-full accent-cyan-500 h-1 bg-slate-900 rounded-full" />
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="flex justify-between items-center">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Brightness</label>
+                        <span className="text-xs font-mono text-cyan-400 font-bold">{ostParams.brightness}%</span>
+                      </div>
+                      <input type="range" min="0" max="100" value={ostParams.brightness} onChange={e => setOstParams({ ...ostParams, brightness: parseInt(e.target.value) })} className="w-full accent-cyan-500 h-1 bg-slate-900 rounded-full" />
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Atmospheric Prompt</label>
+                    <textarea className="w-full h-24 bg-slate-950/50 border border-slate-800 rounded-xl p-4 text-xs text-slate-300 font-bold focus:outline-none focus:border-cyan-500/50 transition-all resize-none" placeholder="E.g., Dark orchestral theme for a zombie graveyard..." />
+                  </div>
+
+                  <button
+                    onClick={handleForgeOst}
+                    disabled={isForgingOst}
+                    className="w-full py-4 bg-cyan-600 text-slate-950 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl hover:bg-cyan-500 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                  >
+                    {isForgingOst ? <RefreshCcw size={18} className="animate-spin" /> : <Cpu size={18} />} Forge Soundtrack
+                  </button>
+                </div>
+              </div>
+
+              {/* Master Monitor */}
+              <div className="flex-1 glass-panel rounded-[3rem] border border-slate-800 bg-slate-950 flex flex-col overflow-hidden relative group">
+                <div className="absolute inset-0 opacity-[0.02] pointer-events-none" style={{ backgroundImage: 'linear-gradient(#22d3ee 1px, transparent 1px), linear-gradient(90deg, #22d3ee 1px, transparent 1px)', backgroundSize: '32px 32px' }} />
+
+                <div className="flex-1 flex flex-col items-center justify-center gap-12 p-12">
+                  <div className="w-full aspect-video bg-slate-900/60 rounded-[2.5rem] border border-white/5 flex flex-col items-center justify-center relative overflow-hidden">
+                    <div className="absolute inset-0 flex items-center gap-1 px-8">
+                      {[...Array(128)].map((_, i) => (
+                        <div key={i} className="flex-1 bg-cyan-500/20 rounded-full transition-all" style={{ height: `${10 + Math.random() * 60}%` }} />
+                      ))}
+                    </div>
+                    <div className="z-10 flex flex-col items-center gap-4">
+                      <Waves size={64} className="text-slate-800" />
+                      <p className="text-[10px] font-black text-slate-600 uppercase tracking-[0.5em]">Lyria 2 Spectral Monitoring</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-4">
+                    <button className="px-12 py-4 bg-slate-900 text-slate-500 font-black uppercase text-[10px] tracking-widest rounded-2xl border border-white/5 disabled:opacity-50" disabled>Save to Assembler</button>
+                    <button className="px-12 py-4 bg-slate-900 text-slate-500 font-black uppercase text-[10px] tracking-widest rounded-2xl border border-white/5 disabled:opacity-50" disabled>Export Pattern</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {echoTab === 'SIGNAL_GEN' && (
             <div className="h-full flex gap-8">
               <div className="w-1/3 flex flex-col gap-6">
@@ -1497,7 +2165,7 @@ const NexusPlugin: React.FC = () => {
                 <button onClick={handleFitToView} className="p-1.5 text-cyan-500 hover:text-white flex items-center gap-1.5 px-2"><Focus size={14} /><span className="text-[8px] font-black uppercase">Fit</span></button>
               </div>
               <button onClick={handleNeuralOrchestration} className="px-4 py-2 bg-purple-600/20 border border-purple-500/30 text-purple-400 rounded-xl text-[9px] font-black tracking-widest uppercase hover:bg-purple-600/30 transition-all flex items-center gap-2">
-                <Sparkles size={14} /> Generate from Assets ({assets.length})
+                <Sparkles size={14} /> AI Auto-Link (Generate) ({assets.filter(a => a.status === 'Unlinked').length})
               </button>
               <button onClick={() => setGameState(prev => ({ ...prev, nodes: [] }))} className="px-4 py-2 bg-red-600/20 border border-red-500/30 text-red-400 rounded-xl text-[9px] font-black tracking-widest uppercase hover:bg-red-600/30 flex items-center gap-2">
                 <Trash2 size={14} /> Clear
@@ -1631,8 +2299,7 @@ const NexusPlugin: React.FC = () => {
           <div className="flex items-center gap-4">
             {([
               { id: 'QUEST', label: 'QUESTS & NARRATIVE' },
-              { id: 'LOGIC', label: 'LOGIC BOARD' },
-              { id: 'DEPLOY', label: 'DEPLOY' }
+              { id: 'LOGIC', label: 'LOGIC BOARD' }
             ] as { id: GenesisTab, label: string }[]).map((tab) => (
               <button
                 key={tab.id}
@@ -1651,35 +2318,46 @@ const NexusPlugin: React.FC = () => {
         <div className="flex-1 min-h-0">
           {genesisTab === 'QUEST' && renderQuestEditor()}
           {genesisTab === 'LOGIC' && renderVisualLogic()}
-          {genesisTab === 'DEPLOY' && <Airlock gameState={gameState} assets={assets} />}
         </div>
       </div>
     );
   };
 
   const renderQuestEditor = () => {
+    const allQuests = [
+      { id: 'q_main_01', title: 'The Awakened Protocol', status: 'Available', progress: 45, type: 'Main' },
+      ...(gameState.quests || [])
+    ];
+
     return (
       <div className="flex h-full gap-6 animate-in fade-in duration-700">
         {/* Quest List */}
         <div className="w-80 glass-panel rounded-3xl border border-slate-800 p-6 flex flex-col gap-4 bg-slate-900/10">
           <header className="flex justify-between items-center mb-2">
             <h3 className="text-sm font-black text-slate-200 uppercase tracking-widest">Active Quests</h3>
-            <button className="p-2 bg-cyan-500/10 text-cyan-400 rounded-lg hover:bg-cyan-500/20"><Plus size={14} /></button>
+            <div className="flex gap-2">
+              <button onClick={handleQuestAutoSync} className="p-2 bg-purple-500/10 text-purple-400 rounded-lg hover:bg-purple-500/20 flex items-center gap-2 text-[8px] font-black uppercase tracking-widest">
+                <Sparkles size={12} /> Auto-Sync
+              </button>
+              <button className="p-2 bg-cyan-500/10 text-cyan-400 rounded-lg hover:bg-cyan-500/20"><Plus size={14} /></button>
+            </div>
           </header>
           <div className="space-y-3">
-            {[
-              { title: 'The Awakened Protocol', status: 'Active', progress: 45 },
-              { title: 'Cyber-Psychosis', status: 'Pending', progress: 0 },
-              { title: 'Neural Leakage', status: 'Completed', progress: 100 },
-            ].map((q, i) => (
-              <div key={i} className={`p-4 rounded-xl border ${i === 0 ? 'bg-cyan-500/5 border-cyan-500/30' : 'bg-slate-900/40 border-slate-800'} cursor-pointer hover:border-cyan-500/30 transition-all`}>
+            {allQuests.map((q, i) => (
+              <div key={q.id} className={`p-4 rounded-xl border ${i === 0 ? 'bg-cyan-500/5 border-cyan-500/30' : 'bg-slate-900/40 border-slate-800'} cursor-pointer hover:border-cyan-500/30 transition-all`}>
                 <div className="flex justify-between items-start mb-2">
                   <h4 className={`text-xs font-bold uppercase tracking-wide ${i === 0 ? 'text-cyan-400' : 'text-slate-400'}`}>{q.title}</h4>
                   {q.status === 'Completed' && <CheckCircle size={12} className="text-emerald-500" />}
                 </div>
                 <div className="w-full h-1 bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-cyan-500" style={{ width: `${q.progress}%` }} />
+                  <div className="h-full bg-cyan-500" style={{ width: `${q.progress || 0}%` }} />
                 </div>
+                {q.linkedAssetId && (
+                  <div className="mt-2 flex items-center gap-1">
+                    <Database size={8} className="text-slate-600" />
+                    <span className="text-[7px] font-mono text-slate-600 uppercase">LINKED_ASSET</span>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -1758,13 +2436,13 @@ const NexusPlugin: React.FC = () => {
           </div>
           <div className="flex items-center gap-4">
             <button
-              onClick={handleNeuralOrchestration}
+              onClick={runAutoLink}
               disabled={isOrchestrating || assets.length === 0}
               className={`flex items-center gap-3 px-6 py-3 rounded-xl text-[10px] font-black tracking-[0.2em] uppercase transition-all shadow-xl ${isOrchestrating || assets.length === 0 ? 'bg-slate-800 text-slate-600' : 'bg-purple-600/20 border border-purple-500/30 text-purple-400 hover:bg-purple-600/30'
                 }`}
             >
               {isOrchestrating ? <RefreshCcw size={16} className="animate-spin" /> : <Sparkles size={16} />}
-              {isOrchestrating ? 'Linking...' : 'AI Neural Link'}
+              {isOrchestrating ? 'Linking...' : 'AI Auto-Link'}
             </button>
             <button
               onClick={runAutoLink}
@@ -1772,7 +2450,7 @@ const NexusPlugin: React.FC = () => {
               className="flex items-center gap-3 px-6 py-3 rounded-xl text-[10px] font-black tracking-[0.2em] uppercase transition-all shadow-xl bg-emerald-600/20 border border-emerald-500/30 text-emerald-400 hover:bg-emerald-600/30"
             >
               <Link size={16} />
-              Quick Link
+              Verify Links
             </button>
             <button
               onClick={scanDirectory}
@@ -1826,6 +2504,16 @@ const NexusPlugin: React.FC = () => {
                 setEditNameValue={setEditNameValue}
                 startEdit={() => { setEditingAssetId(asset.id); setEditNameValue(asset.name); }}
                 saveEdit={saveRename}
+                onSendToSynapse={asset.type === 'Sprite' ? () => {
+                  setSynapsePrompt(asset.name);
+                  if (asset.previewUrl) setGeneratedSprite(asset.previewUrl);
+                  setActiveModule('SYNAPSE');
+                } : undefined}
+                onSendToEcho={asset.type === 'Audio' ? () => {
+                  setEchoPrompt(asset.name);
+                  if (asset.previewUrl) setGeneratedAudio(asset.previewUrl);
+                  setActiveModule('ECHO');
+                } : undefined}
               />
             ))}
             {assets.length === 0 && (
@@ -1884,8 +2572,313 @@ const NexusPlugin: React.FC = () => {
             </button>
           ))}
         </nav>
+        {/* Settings Button */}
+        <div className="p-4 border-t border-white/5">
+          <button
+            onClick={() => setIsSettingsOpen(true)}
+            className="flex items-center gap-4 px-5 py-4 rounded-2xl transition-all w-full text-slate-500 hover:bg-white/5 hover:text-slate-200"
+          >
+            <Settings size={20} />
+            <div className="text-left"><p className="text-[11px] font-black uppercase tracking-widest">Settings</p><p className="text-[8px] font-bold uppercase tracking-tighter opacity-70">API & Config</p></div>
+          </button>
+        </div>
       </aside>
+
+      {/* Settings Modal */}
+      {isSettingsOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center animate-in fade-in duration-300">
+          <div className="bg-[#0a0f1a] border border-cyan-500/20 rounded-[2rem] w-[500px] shadow-2xl animate-in zoom-in-95 duration-300">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-white/5 flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 bg-cyan-500/10 rounded-xl flex items-center justify-center text-cyan-400 border border-cyan-500/20">
+                  <Settings size={20} />
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-white uppercase tracking-widest">Settings</h2>
+                  <p className="text-[9px] text-slate-500 font-bold uppercase">API Configuration</p>
+                </div>
+              </div>
+              <button onClick={() => setIsSettingsOpen(false)} className="p-2 text-slate-500 hover:text-white transition-colors">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6 space-y-6">
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                  <Key size={12} /> Gemini API Key
+                </label>
+                <div className="flex gap-3">
+                  <div className="flex-1 relative">
+                    <input
+                      type={showApiKey ? 'text' : 'password'}
+                      value={apiKeyInput}
+                      onChange={e => setApiKeyInput(e.target.value)}
+                      placeholder="Enter your Gemini API key..."
+                      className="w-full bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50 pr-10"
+                    />
+                    <button
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-white"
+                    >
+                      {showApiKey ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+                <p className="text-[9px] text-slate-600">Get your API key from <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-cyan-500 hover:underline">Google AI Studio</a></p>
+              </div>
+
+              {savedApiKey && (
+                <div className="flex items-center gap-2 px-4 py-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+                  <CheckCircle size={14} className="text-emerald-400" />
+                  <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">API Key Saved</span>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 border-t border-white/5 flex justify-end gap-3">
+              <button
+                onClick={() => setIsSettingsOpen(false)}
+                className="px-6 py-3 bg-slate-900 text-slate-400 rounded-xl text-[10px] font-black uppercase tracking-widest hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => { handleSaveApiKey(); setIsSettingsOpen(false); }}
+                className="px-6 py-3 bg-cyan-500 text-slate-950 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-cyan-400 transition-colors shadow-xl"
+              >
+                Save Settings
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 p-10 overflow-y-auto custom-scrollbar"><div className="max-w-7xl mx-auto h-full">{renderModule()}</div></div>
+
+      {/* AI Assistant Floating Button */}
+      <button
+        onClick={() => setIsAiPanelOpen(!isAiPanelOpen)}
+        className={`fixed bottom-8 right-8 w-16 h-16 rounded-full shadow-2xl z-50 flex items-center justify-center transition-all hover:scale-110 ${isAiPanelOpen ? 'bg-slate-800 text-white' : 'bg-gradient-to-br from-cyan-500 to-purple-600 text-white'}`}
+      >
+        {isAiPanelOpen ? <X size={24} /> : <Bot size={28} />}
+      </button>
+
+      {/* AI Assistant Slide-Out Panel */}
+      <div className={`fixed top-0 right-0 h-full w-[480px] bg-[#0a0f1a]/95 backdrop-blur-3xl border-l border-cyan-500/20 z-40 flex flex-col transition-transform duration-500 ${isAiPanelOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+        {/* Header */}
+        <div className="p-6 border-b border-white/5 bg-gradient-to-r from-cyan-500/5 to-purple-500/5">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-xl">
+              <Bot size={24} className="text-white" />
+            </div>
+            <div>
+              <h2 className="text-sm font-black text-white uppercase tracking-widest">NexGen AI</h2>
+              <p className="text-[9px] text-slate-500 font-bold uppercase">Game Dev Co-Pilot</p>
+            </div>
+          </div>
+          <div className="mt-4 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-[8px] font-bold text-slate-500 uppercase tracking-widest">
+              <div className={`w-1.5 h-1.5 rounded-full ${aiDeepContext.lastSyncTime ? 'bg-emerald-500' : 'bg-amber-500'} animate-pulse`} />
+              {aiDeepContext.lastSyncTime
+                ? `Deep Synced: ${aiDeepContext.assetSummaries.length} files`
+                : `Basic: ${assets.length} Assets`}
+            </div>
+            <button
+              onClick={handleSyncContext}
+              disabled={aiDeepContext.isSyncing || assets.length === 0}
+              className="flex items-center gap-2 px-3 py-1.5 bg-purple-500/10 border border-purple-500/20 rounded-lg text-[8px] font-black text-purple-400 hover:bg-purple-500/20 transition-all disabled:opacity-50"
+            >
+              {aiDeepContext.isSyncing ? <RefreshCcw size={10} className="animate-spin" /> : <Zap size={10} />}
+              {aiDeepContext.isSyncing ? 'Syncing...' : 'Sync Context'}
+            </button>
+          </div>
+        </div>
+
+        {/* Chat Messages */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4">
+          {aiMessages.length === 0 && (
+            <div className="text-center py-12 opacity-40">
+              <Bot size={48} className="mx-auto text-slate-600 mb-4" />
+              <p className="text-xs font-black text-slate-500 uppercase tracking-widest">Ask me anything about your game</p>
+              <p className="text-[9px] text-slate-600 mt-2">I can help create quests, logic, navigate the app, and more.</p>
+            </div>
+          )}
+          {aiMessages.map((msg, i) => (
+            msg.content.startsWith('__NAV__') ? (
+              <button
+                key={i}
+                onClick={() => {
+                  const target = msg.content.replace('__NAV__', '') as NexusModule;
+                  setActiveModule(target);
+                  setIsAiPanelOpen(false);
+                }}
+                className="w-full py-3 bg-cyan-500/10 border border-cyan-500/30 rounded-xl text-xs font-black uppercase text-cyan-400 hover:bg-cyan-500/20 transition-all flex items-center justify-center gap-2"
+              >
+                <Rocket size={14} /> Navigate to {msg.content.replace('__NAV__', '')}
+              </button>
+            ) : msg.content.startsWith('__FILE_EDIT__') ? (
+              <div
+                key={i}
+                className="p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30"
+              >
+                <p className="text-[8px] font-black uppercase tracking-widest mb-2 text-amber-400">📝 File Edit Suggested</p>
+                <p className="text-xs text-white mb-3">{msg.content.replace('__FILE_EDIT__', '')}</p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      setActiveDiffIndex(pendingFileEdits.length - 1);
+                      setIsDiffPanelOpen(true);
+                    }}
+                    className="px-3 py-2 bg-amber-500/20 border border-amber-500/30 rounded-lg text-[9px] font-black text-amber-400 hover:bg-amber-500/30 transition-all flex items-center gap-2"
+                  >
+                    <Eye size={12} /> Review Changes
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div
+                key={i}
+                className={`p-4 rounded-2xl text-xs leading-relaxed ${msg.role === 'user'
+                  ? 'bg-cyan-500/10 text-cyan-300 ml-8 border border-cyan-500/20'
+                  : 'bg-slate-900/60 text-slate-300 mr-8 border border-white/5'
+                  }`}
+              >
+                <p className="text-[8px] font-black uppercase tracking-widest mb-2 opacity-50">{msg.role === 'user' ? 'You' : 'NexGen AI'}</p>
+                <div className="whitespace-pre-wrap">{msg.content}</div>
+              </div>
+            )
+          ))}
+          {isAiThinking && (
+            <div className="flex items-center gap-3 p-4 bg-slate-900/60 rounded-2xl border border-white/5 mr-8">
+              <RefreshCcw size={16} className="text-cyan-400 animate-spin" />
+              <span className="text-xs text-slate-400 font-bold">Thinking...</span>
+            </div>
+          )}
+        </div>
+
+        {/* Quick Actions */}
+        <div className="px-6 pb-3 flex flex-wrap gap-2">
+          {['Where can I edit sprites?', 'Create a main quest', 'Help with logic'].map((q, i) => (
+            <button
+              key={i}
+              onClick={() => { setAiInput(q); }}
+              className="px-3 py-1.5 bg-slate-900/60 border border-white/5 rounded-lg text-[9px] font-bold text-slate-400 hover:text-white hover:border-cyan-500/30 transition-all"
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+
+        {/* Input Bar */}
+        <div className="p-6 border-t border-white/5 bg-slate-950/50">
+          <div className="flex gap-3">
+            <input
+              value={aiInput}
+              onChange={e => setAiInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleAiSubmit()}
+              placeholder="Ask about game dev, navigate, or create content..."
+              className="flex-1 bg-slate-900 border border-white/10 rounded-xl px-4 py-3 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50"
+            />
+            <button
+              onClick={handleAiSubmit}
+              disabled={isAiThinking || !aiInput.trim()}
+              className="w-12 h-12 bg-cyan-500 text-slate-950 rounded-xl flex items-center justify-center hover:bg-cyan-400 transition-all disabled:opacity-50 shadow-xl"
+            >
+              <Send size={18} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Diff Preview Slide-Out Panel */}
+      <div className={`fixed top-0 right-0 h-full w-[600px] bg-[#0a0f1a]/95 backdrop-blur-3xl border-l border-amber-500/20 z-50 flex flex-col transition-transform duration-500 ${isDiffPanelOpen ? 'translate-x-0' : 'translate-x-full'}`}>
+        {/* Diff Panel Header */}
+        <div className="p-6 border-b border-white/5 bg-gradient-to-r from-amber-500/5 to-orange-500/5 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-xl">
+              <FileText size={24} className="text-white" />
+            </div>
+            <div>
+              <h2 className="text-sm font-black text-white uppercase tracking-widest">File Changes</h2>
+              <p className="text-[9px] text-slate-500 font-bold uppercase">Review Before Applying</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setIsDiffPanelOpen(false)}
+            className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center hover:bg-slate-700 transition-all"
+          >
+            <X size={18} className="text-white" />
+          </button>
+        </div>
+
+        {/* Diff Content */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+          {pendingFileEdits.length === 0 ? (
+            <div className="text-center py-12 opacity-40">
+              <FileText size={48} className="mx-auto text-slate-600 mb-4" />
+              <p className="text-xs font-black text-slate-500 uppercase tracking-widest">No Pending Changes</p>
+            </div>
+          ) : (
+            <div className="space-y-6">
+              {pendingFileEdits.map((edit, index) => (
+                <div key={index} className="bg-slate-900/60 border border-white/10 rounded-2xl overflow-hidden">
+                  {/* File Header */}
+                  <div className="px-4 py-3 bg-slate-800/50 border-b border-white/5 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <FileText size={16} className="text-amber-400" />
+                      <span className="text-xs font-black text-white">{edit.fileName}</span>
+                    </div>
+                    <span className="text-[9px] text-slate-500">{edit.timestamp.toLocaleTimeString()}</span>
+                  </div>
+
+                  {/* Diff Preview */}
+                  <div className="p-4 max-h-64 overflow-y-auto">
+                    <pre className="text-[10px] font-mono text-slate-300 whitespace-pre-wrap">
+                      {generateDiff(edit.originalContent, edit.suggestedContent, edit.fileName).slice(0, 1500)}
+                      {generateDiff(edit.originalContent, edit.suggestedContent, edit.fileName).length > 1500 && '\n... (truncated)'}
+                    </pre>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="px-4 py-3 bg-slate-800/30 border-t border-white/5 flex gap-2">
+                    <button
+                      onClick={() => handleDownloadDiff(index)}
+                      className="flex-1 py-2 bg-slate-700/50 border border-slate-600/30 rounded-lg text-[9px] font-black text-slate-300 hover:bg-slate-700 transition-all flex items-center justify-center gap-2"
+                    >
+                      <Download size={12} /> Download .diff
+                    </button>
+                    <button
+                      onClick={() => handleApplyChanges(index)}
+                      className="flex-1 py-2 bg-emerald-500/20 border border-emerald-500/30 rounded-lg text-[9px] font-black text-emerald-400 hover:bg-emerald-500/30 transition-all flex items-center justify-center gap-2"
+                    >
+                      <Check size={12} /> Download Updated File
+                    </button>
+                    <button
+                      onClick={() => handleDismissEdit(index)}
+                      className="py-2 px-3 bg-red-500/10 border border-red-500/20 rounded-lg text-[9px] font-black text-red-400 hover:bg-red-500/20 transition-all"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Pending Edits Count */}
+        {pendingFileEdits.length > 0 && (
+          <div className="p-4 border-t border-white/5 bg-slate-950/50 text-center">
+            <p className="text-[9px] font-black text-amber-400 uppercase tracking-widest">
+              {pendingFileEdits.length} Pending Edit{pendingFileEdits.length > 1 ? 's' : ''}
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { NavTab } from './types';
+import { NavTab } from '../types';
 import Sidebar from './components/Sidebar';
 import Projects from './components/Projects';
 import Settings from './components/Settings';

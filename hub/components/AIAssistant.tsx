@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Loader2, Sparkles, Terminal } from 'lucide-react';
 import { generateDevResponse } from '../services/geminiService';
-import { ChatMessage } from '../types';
+import { ChatMessage } from '../../types';
 
 const AIAssistant: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -36,7 +36,7 @@ const AIAssistant: React.FC = () => {
       }));
 
       const aiResponse = await generateDevResponse(input, history);
-      
+
       const botMessage: ChatMessage = {
         role: 'model',
         content: aiResponse || "I couldn't generate a response. Please try again.",
@@ -97,8 +97,8 @@ const AIAssistant: React.FC = () => {
                   "GLSL fragment shader for water",
                   "GDScript state machine"
                 ].map((hint, i) => (
-                  <button 
-                    key={i} 
+                  <button
+                    key={i}
                     onClick={() => setInput(hint)}
                     className="text-xs p-3 bg-slate-900/50 border border-slate-800 rounded-xl hover:border-cyan-500/50 transition-colors text-slate-300"
                   >
@@ -110,16 +110,14 @@ const AIAssistant: React.FC = () => {
           ) : (
             messages.map((msg, i) => (
               <div key={i} className={`flex gap-4 ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                  msg.role === 'user' ? 'bg-slate-700 text-slate-100' : 'bg-cyan-500 text-white shadow-[0_0_10px_rgba(6,182,212,0.3)]'
-                }`}>
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${msg.role === 'user' ? 'bg-slate-700 text-slate-100' : 'bg-cyan-500 text-white shadow-[0_0_10px_rgba(6,182,212,0.3)]'
+                  }`}>
                   {msg.role === 'user' ? <User size={18} /> : <Bot size={18} />}
                 </div>
-                <div className={`max-w-[80%] rounded-2xl p-4 text-sm leading-relaxed ${
-                  msg.role === 'user' 
-                    ? 'bg-slate-800 text-slate-200 rounded-tr-none' 
+                <div className={`max-w-[80%] rounded-2xl p-4 text-sm leading-relaxed ${msg.role === 'user'
+                    ? 'bg-slate-800 text-slate-200 rounded-tr-none'
                     : 'bg-slate-900 border border-slate-800 text-slate-300 rounded-tl-none'
-                }`}>
+                  }`}>
                   <div className="whitespace-pre-wrap font-sans">
                     {msg.content}
                   </div>
@@ -155,7 +153,7 @@ const AIAssistant: React.FC = () => {
               rows={1}
               className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-4 pr-12 py-3 focus:outline-none focus:ring-2 focus:ring-cyan-500/20 focus:border-cyan-500 transition-all resize-none min-h-[48px] max-h-32"
             />
-            <button 
+            <button
               onClick={handleSend}
               disabled={isLoading || !input.trim()}
               className="absolute right-2 bottom-2 p-1.5 bg-cyan-500 text-white rounded-lg hover:bg-cyan-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
