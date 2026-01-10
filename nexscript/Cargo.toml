@@ -1,0 +1,18 @@
+[package]
+name = "nexscript"
+version = "0.1.0"
+edition = "2021"
+description = "NexScript - A game-focused scripting language for NexGen Engine"
+authors = ["NexGen Team"]
+
+[dependencies]
+pest = "2.7"
+pest_derive = "2.7"
+thiserror = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+clap = { version = "4.4", features = ["derive"] }
+glob = "0.3"
+
+[dev-dependencies]
+pretty_assertions = "1.4"

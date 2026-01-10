@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+/* Custom Scrollbar (Ported from index.html) */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.2);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(51, 65, 85, 0.5);
+  border-radius: 10px;
+}
+
+/* Glass Panel Utility */
+.glass-panel {
+  background: rgba(15, 23, 42, 0.25);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+/* Scanline Effect */
+@keyframes scanline {
+  0% {
+    transform: translateY(-100%);
+  }
+
+  100% {
+    transform: translateY(100%);
+  }
+}
+
+.scanline-effect::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, transparent, rgba(6, 182, 212, 0.05), transparent);
+  height: 100px;
+  animation: scanline 8s linear infinite;
+  pointer-events: none;
+}

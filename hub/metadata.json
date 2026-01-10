@@ -1,0 +1,8 @@
+{
+  "name": "NEXGEN-HUB",
+  "description": "A cutting-edge game development suite hub for managing projects, assets, and AI-powered development workflows.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

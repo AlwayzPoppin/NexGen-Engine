@@ -1,0 +1,35 @@
+# player.nx - Sample NexScript file for testing
+
+entity Player:
+    component Transform:
+        position = Vec2(0, 0)
+        rotation = 0.0
+    
+    component Health:
+        current = 100
+        max = 100
+    
+    let speed = 200.0
+    let is_grounded = false
+    
+    signal health_changed(old: int, new: int)
+    signal died()
+    
+    fn on_ready():
+        print("Player spawned!")
+    
+    fn on_update(delta: float):
+        handle_movement(delta)
+    
+    fn take_damage(amount: int):
+        let old = Health.current
+        Health.current = Health.current - amount
+        emit health_changed(old, Health.current)
+        
+        if Health.current <= 0:
+            die()
+    
+    async fn die():
+        play_animation("death")
+        await wait(1.0)
+        emit died()

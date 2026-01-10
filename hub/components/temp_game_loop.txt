@@ -1,0 +1,191 @@
+// --- RUNTIME SIMULATION ---
+const GameCanvas: React.FC<{ gameState: GlobalGameState; isPlaying: boolean }> = ({ gameState, isPlaying }) => {
+    const canvasRef = React.useRef<HTMLCanvasElement>(null);
+    const [entities, setEntities] = React.useState(gameState.entities);
+    
+    // Runtime UI State
+    const [dialogData, setDialogData] = React.useState<{text: string, speaker: string} | null>(null);
+    const [activeQuests, setActiveQuests] = React.useState<string[]>([]);
+
+    // Sync entities from global state when not playing (Editor Mode reset)
+    React.useEffect(() => {
+        if (!isPlaying) {
+            setEntities(gameState.entities);
+            setDialogData(null);
+            setActiveQuests([]);
+        }
+    }, [gameState.entities, isPlaying]);
+
+    // Game Loop
+    React.useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!isPlaying || !canvas) return;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        let animationFrameId: number;
+        let lastTime = performance.now();
+        let fxIntensity = 0; // For screenshake
+
+        // LOGIC INTERPRETER
+        const executeLogic = (entity: GameEntity2D, dt: number) => {
+            if (!entity.linkedLogicId) return entity;
+            
+            const entryNode = gameState.nodes.find(n => n.id === entity.linkedLogicId);
+            if (!entryNode || entryNode.type !== 'Event') return entity;
+
+            let updates: any = {};
+            let localX = entity.x; 
+
+            // Simple Interpreter
+            gameState.wires
+                .filter(w => w.fromNode === entryNode.id && w.fromPin.includes('exec')) 
+                .forEach(wire => {
+                    const nextNode = gameState.nodes.find(n => n.id === wire.toNode);
+                    if (!nextNode) return;
+
+                    // ACTION: Movement
+                    if (nextNode.type === 'Action') {
+                        const speed = 200; 
+                        if (nextNode.label === 'Move Right') localX += speed * dt;
+                        if (nextNode.label === 'Move Left') localX -= speed * dt;
+                        if (nextNode.label === 'Move Up') updates.y = (entity.y) - (speed * dt);
+                    }
+
+                    // NARRATIVE: Dialog
+                    if (nextNode.type === 'Narrative' && nextNode.label === 'Show Dialog') {
+                        // In a real engine, we'd check if dialog is already showing or use a trigger
+                        // For this loop, we just "activate" it constantly if the event is "On Update" (not ideal but works for demo)
+                        // Better: Check a flag or only trigger once.
+                        setDialogData({
+                             text: "Greetings, Traveler! The system is online.", 
+                             speaker: "System AI"
+                        });
+                    }
+
+                    // QUEST: Start
+                    if (nextNode.type === 'Quest' && nextNode.label === 'Start Quest') {
+                        if (!activeQuests.includes('quest_01')) {
+                             setActiveQuests(prev => [...prev, 'quest_01']);
+                        }
+                    }
+
+                    // VISUAL: FX
+                    if (nextNode.type === 'Visual' && nextNode.label === 'Fade In') {
+                        fxIntensity = Math.max(0, fxIntensity + 0.01);
+                    }
+                });
+            
+            if (localX !== entity.x) updates.x = localX;
+
+            return { ...entity, ...updates };
+        };
+
+        const render = (time: number) => {
+            const dt = (time - lastTime) / 1000;
+            lastTime = time;
+
+            // 1. UPDATE STATE
+            let activeEntities = [...entities];
+            // @ts-ignore
+            activeEntities = activeEntities.map(ent => executeLogic(ent, dt));
+            setEntities(activeEntities);
+
+            // 2. RENDER
+            // Clear
+            ctx.fillStyle = '#0f172a'; // slate-900
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Grid
+            ctx.strokeStyle = '#1e293b'; // slate-800
+            ctx.lineWidth = 1;
+            const offsetX = (canvas.width / 2) - 4000; 
+            const offsetY = (canvas.height / 2) - 4000;
+
+            // Draw Entities
+            activeEntities.forEach(ent => {
+                 if (!ent.visible) return;
+                 ctx.save();
+                 
+                 const screenX = ent.x + offsetX;
+                 const screenY = ent.y + offsetY;
+
+                 ctx.translate(screenX, screenY);
+                 
+                 // Draw Body
+                 ctx.fillStyle = ent.type === 'Player' ? '#10b981' : 
+                                 ent.type === 'Sprite' ? '#06b6d4' : '#64748b';
+                 ctx.shadowColor = ent.type === 'Player' ? 'rgba(16, 185, 129, 0.5)' : 'rgba(6, 182, 212, 0.5)';
+                 ctx.shadowBlur = 20;
+                 
+                 ctx.beginPath();
+                 if (ent.type === 'Player') {
+                    ctx.moveTo(0, -20);
+                    ctx.lineTo(15, 15);
+                    ctx.lineTo(-15, 15);
+                    ctx.closePath();
+                 } else {
+                    ctx.arc(0, 0, 15 * ent.scale, 0, Math.PI * 2);
+                 }
+                 ctx.fill();
+                 
+                 // Label
+                 ctx.shadowBlur = 0;
+                 ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                 ctx.font = '10px monospace';
+                 ctx.textAlign = 'center';
+                 ctx.fillText(ent.name, 0, -30);
+
+                 ctx.restore();
+            });
+
+            animationFrameId = window.requestAnimationFrame(render);
+        };
+
+        render(performance.now());
+
+        return () => window.cancelAnimationFrame(animationFrameId);
+    }, [isPlaying, gameState]); 
+
+    return (
+        <div className="flex-1 relative bg-slate-950 overflow-hidden flex items-center justify-center">
+             <div className="absolute inset-0 opacity-[0.05] pointer-events-none"
+                style={{
+                    backgroundImage: 'linear-gradient(#475569 1px, transparent 1px), linear-gradient(90deg, #475569 1px, transparent 1px)',
+                    backgroundSize: '48px 48px'
+                }}
+            />
+             <canvas 
+                ref={canvasRef} 
+                width={1200} 
+                height={800} 
+                className="w-full h-full object-cover"
+             />
+             <div className="absolute bottom-4 right-4 text-[10px] font-mono text-slate-600">
+                RENDER_ENGINE::WEBGL_Polyfill
+             </div>
+
+             {/* UI OVERLAY */}
+             {dialogData && (
+                <div className="absolute bottom-10 left-10 right-10 bg-slate-900/90 border border-white/10 p-6 rounded-2xl backdrop-blur-xl animate-in slide-in-from-bottom-5">
+                    <h4 className="text-emerald-400 font-black uppercase tracking-widest text-xs mb-2">{dialogData.speaker}</h4>
+                    <p className="text-white text-lg font-bold">{dialogData.text}</p>
+                </div>
+             )}
+             
+             {activeQuests.length > 0 && (
+                 <div className="absolute top-10 right-10 w-64 bg-slate-900/80 border border-amber-500/20 p-4 rounded-xl backdrop-blur-xl">
+                    <h4 className="text-amber-500 font-black uppercase tracking-widest text-[10px] mb-3 flex items-center gap-2">
+                        <Target size={12} /> Active Quests
+                    </h4>
+                    {activeQuests.map(q => (
+                        <div key={q} className="text-xs text-slate-300 font-bold bg-amber-500/10 px-3 py-2 rounded-lg border border-amber-500/10">
+                            {q}
+                        </div>
+                    ))}
+                 </div>
+             )}
+        </div>
+    );
+};

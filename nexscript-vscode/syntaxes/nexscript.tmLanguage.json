@@ -1,0 +1,120 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "NexScript",
+    "patterns": [
+        {
+            "include": "#comments"
+        },
+        {
+            "include": "#keywords"
+        },
+        {
+            "include": "#strings"
+        },
+        {
+            "include": "#constants"
+        },
+        {
+            "include": "#types"
+        },
+        {
+            "include": "#functions"
+        },
+        {
+            "include": "#numbers"
+        }
+    ],
+    "repository": {
+        "comments": {
+            "patterns": [
+                {
+                    "name": "comment.line.number-sign.nx",
+                    "match": "#.*$"
+                }
+            ]
+        },
+        "keywords": {
+            "patterns": [
+                {
+                    "name": "keyword.control.nx",
+                    "match": "\\b(if|else|elif|while|for|return|break|continue|pass|emit|await)\\b"
+                },
+                {
+                    "name": "storage.type.class.nx",
+                    "match": "\\b(entity|component|state_machine|state|signal)\\b"
+                },
+                {
+                    "name": "keyword.other.fn.nx",
+                    "match": "\\b(fn|async)\\b"
+                },
+                {
+                    "name": "keyword.declaration.nx",
+                    "match": "\\b(let)\\b"
+                }
+            ]
+        },
+        "types": {
+            "patterns": [
+                {
+                    "name": "storage.type.nx",
+                    "match": "\\b(int|float|bool|str|void|Vec2|Vec3|Color|List|Map)\\b"
+                }
+            ]
+        },
+        "constants": {
+            "patterns": [
+                {
+                    "name": "constant.language.boolean.nx",
+                    "match": "\\b(true|false)\\b"
+                },
+                {
+                    "name": "variable.language.this.nx",
+                    "match": "\\b(self)\\b"
+                }
+            ]
+        },
+        "strings": {
+            "name": "string.quoted.double.nx",
+            "begin": "\"",
+            "end": "\"",
+            "patterns": [
+                {
+                    "name": "constant.character.escape.nx",
+                    "match": "\\\\."
+                }
+            ]
+        },
+        "functions": {
+            "patterns": [
+                {
+                    "name": "entity.name.function.nx",
+                    "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)(?=\\()"
+                },
+                {
+                    "match": "\\b(fn)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+                    "captures": {
+                        "1": {
+                            "name": "keyword.other.fn.nx"
+                        },
+                        "2": {
+                            "name": "entity.name.function.nx"
+                        }
+                    }
+                }
+            ]
+        },
+        "numbers": {
+            "patterns": [
+                {
+                    "name": "constant.numeric.float.nx",
+                    "match": "\\b\\d+\\.\\d+\\b"
+                },
+                {
+                    "name": "constant.numeric.integer.nx",
+                    "match": "\\b\\d+\\b"
+                }
+            ]
+        }
+    },
+    "scopeName": "source.nx"
+}
