@@ -1,11 +1,34 @@
 
 import React, { useState, useEffect } from 'react';
 import { Project, NavTab } from '../../types';
-import { Plus, Search, Filter, FolderOpen, MoreVertical, Clock, ExternalLink, Trash2 } from 'lucide-react';
+import { Plus, Search, Filter, FolderOpen, MoreVertical, Clock, ExternalLink, Trash2, X, Gamepad2, Sword, Rocket, FileText, Save } from 'lucide-react';
 
 interface ProjectsProps {
   setActiveTab: (tab: NavTab) => void;
+  projectHandle?: any;
+  setProjectHandle: (handle: any) => void;
+  onSelectProject?: (project: Project) => void;
 }
+
+// Project templates with explicit style classes
+const PROJECT_TEMPLATES = [
+  {
+    id: 'platformer', name: '2D Platformer', icon: Gamepad2, desc: 'Side-scrolling action game',
+    activeClass: 'border-cyan-500 bg-cyan-500/10', iconBg: 'bg-cyan-500/20', iconColor: 'text-cyan-400'
+  },
+  {
+    id: 'topdown', name: 'Top-Down RPG', icon: Sword, desc: 'Adventure & exploration',
+    activeClass: 'border-purple-500 bg-purple-500/10', iconBg: 'bg-purple-500/20', iconColor: 'text-purple-400'
+  },
+  {
+    id: 'shooter', name: 'Space Shooter', icon: Rocket, desc: 'Fast-paced action',
+    activeClass: 'border-amber-500 bg-amber-500/10', iconBg: 'bg-amber-500/20', iconColor: 'text-amber-400'
+  },
+  {
+    id: 'blank', name: 'Blank Project', icon: FileText, desc: 'Start from scratch',
+    activeClass: 'border-slate-500 bg-slate-500/10', iconBg: 'bg-slate-500/20', iconColor: 'text-slate-400'
+  },
+];
 
 // Detect engine type from project files
 const detectEngine = (files: string[]): 'Unreal' | 'Unity' | 'Godot' | 'NexGen-Native' | 'Bevy' => {
@@ -19,14 +42,66 @@ const detectEngine = (files: string[]): 'Unreal' | 'Unity' | 'Godot' | 'NexGen-N
   return 'NexGen-Native';
 };
 
-const Projects: React.FC<ProjectsProps> = ({ setActiveTab }) => {
+// Sanitize folder names for File System Access API
+const sanitizeFolderName = (name: string) => {
+  return name
+    .replace(/[<>:"/\\|?*]/g, '_') // Replace invalid characters with underscore
+    .trim()
+    .replace(/\.+$/, '') // Remove trailing dots (Windows doesn't like them)
+    .substring(0, 255); // Max path component length
+};
+
+// Generate starter game_context.json based on template
+const generateGameContext = (projectName: string, template: string) => {
+  const base = {
+    "$schema": "nexgen-game-context",
+    "version": "1.0",
+    "lastUpdated": new Date().toISOString().split('T')[0],
+    "game": {
+      "title": projectName,
+      "tagline": "A game made with NexGen Engine",
+      "genre": template === 'platformer' ? '2D Platformer' :
+        template === 'topdown' ? 'Top-Down RPG' :
+          template === 'shooter' ? 'Space Shooter' : 'Custom',
+      "engine": "NexGen Engine",
+      "perspective": template === 'platformer' ? '2D Side-Scrolling' : '2D Top-Down'
+    },
+    "story": {
+      "premise": "Your adventure begins here..."
+    },
+    "characters": {
+      "player": { "name": "Hero", "description": "The protagonist" },
+      "npcs": []
+    },
+    "gameplayMechanics": {},
+    "quests": [],
+    "zones": []
+  };
+  return JSON.stringify(base, null, 2);
+};
+
+const Projects: React.FC<ProjectsProps> = ({ setActiveTab, projectHandle, setProjectHandle, onSelectProject }) => {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'All' | 'Unreal' | 'Unity' | 'Godot' | 'NexGen-Native'>('All');
   const [projects, setProjects] = useState<Project[]>(() => {
-    // Load from localStorage on init
-    const saved = localStorage.getItem('nexgen-projects');
-    return saved ? JSON.parse(saved) : [];
+    const saved = localStorage.getItem('nexgen_projects');
+    if (saved) return JSON.parse(saved);
+    return [];
   });
+
+  // New Project Modal State
+  const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [selectedTemplate, setSelectedTemplate] = useState('platformer');
+
+  const handleOpenProject = (project: Project) => {
+    console.log('[Projects] Opening:', project.name);
+    if (onSelectProject) {
+      onSelectProject(project);
+    } else {
+      setActiveTab(NavTab.NEXUS);
+    }
+  };
 
   // Save to localStorage whenever projects change
   useEffect(() => {
@@ -42,6 +117,69 @@ const Projects: React.FC<ProjectsProps> = ({ setActiveTab }) => {
       return p;
     }));
   }, []);
+
+  // Listen for global "Open New Project" command
+  useEffect(() => {
+    const handleOpenModal = () => setShowNewProjectModal(true);
+    window.addEventListener('nexgen:open-new-project', handleOpenModal);
+    window.addEventListener('nexgen:trigger-new-modal', handleOpenModal);
+    return () => {
+      window.removeEventListener('nexgen:open-new-project', handleOpenModal);
+      window.removeEventListener('nexgen:trigger-new-modal', handleOpenModal);
+    };
+  }, []);
+
+  // Create new project with template
+  const handleCreateProject = async () => {
+    if (!newProjectName.trim()) return;
+
+    try {
+      // Open folder picker for parent directory
+      const parentDirHandle = await (window as any).showDirectoryPicker({ mode: 'readwrite' });
+
+      const folderName = sanitizeFolderName(newProjectName);
+      if (!folderName) {
+        alert('Invalid project name. Please use alphanumeric characters.');
+        return;
+      }
+
+      // Create project folder
+      const projectDirHandle = await parentDirHandle.getDirectoryHandle(folderName, { create: true });
+      setProjectHandle(projectDirHandle);
+
+      // Create subfolders
+      await projectDirHandle.getDirectoryHandle('assets', { create: true });
+      await projectDirHandle.getDirectoryHandle('scripts', { create: true });
+      const scriptsHandle = await projectDirHandle.getDirectoryHandle('scripts', { create: false });
+      await scriptsHandle.getDirectoryHandle('entities', { create: true });
+      await scriptsHandle.getDirectoryHandle('systems', { create: true });
+
+      // Add to projects list
+      const newProject: Project = {
+        id: `proj_${Date.now()}`,
+        name: newProjectName,
+        engine: 'NexGen-Native',
+        lastModified: 'Just now',
+        status: 'Development',
+        thumbnail: '/default_project_thumb.png',
+        progress: 0,
+        path: folderName
+      };
+
+      setProjects(prev => [newProject, ...prev]);
+      setShowNewProjectModal(false);
+      setNewProjectName('');
+
+      // Navigate to Nexus Core
+      setActiveTab(NavTab.NEXUS);
+
+    } catch (error: any) {
+      if (error.name !== 'AbortError') {
+        console.error('Failed to create project:', error);
+        alert('Failed to create project. Make sure you have write permissions.');
+      }
+    }
+  };
 
   // Add new project from file system
   const handleAddProject = async () => {
@@ -107,9 +245,20 @@ const Projects: React.FC<ProjectsProps> = ({ setActiveTab }) => {
             <Filter size={16} />
             Filter
           </button>
-          <button onClick={handleAddProject} className="flex items-center gap-2 px-6 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-xl text-sm transition-all shadow-lg shadow-cyan-500/20 active:scale-95">
+          <button onClick={() => setShowNewProjectModal(true)} className="flex items-center gap-2 px-6 py-2 bg-slate-900 hover:bg-slate-800 border border-white/5 text-slate-300 font-bold rounded-xl text-sm transition-all active:scale-95">
             <Plus size={18} strokeWidth={3} />
             Create New
+          </button>
+          <button
+            disabled={!projectHandle}
+            onClick={() => {
+              // Trigger a save of current hub state to the project folder
+              window.dispatchEvent(new CustomEvent('nexgen:save-project'));
+            }}
+            className="flex items-center gap-2 px-6 py-2 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold rounded-xl text-sm transition-all shadow-lg shadow-cyan-500/20 active:scale-95 disabled:opacity-50 disabled:grayscale cursor-pointer"
+          >
+            <Save size={18} strokeWidth={3} />
+            Save Project
           </button>
         </div>
       </header>
@@ -188,23 +337,38 @@ const Projects: React.FC<ProjectsProps> = ({ setActiveTab }) => {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-4">
+              <div className="flex items-center justify-between pt-4 border-t border-white/5">
                 <div className="flex -space-x-2">
                   {[1, 2, 3].map((i) => (
                     <div key={i} className="w-6 h-6 rounded-full border-2 border-slate-900 bg-slate-800 flex items-center justify-center overflow-hidden">
-                      <img src={`https://picsum.photos/24/24?seed=user${i + (project.id === 'p1' ? 10 : 20)}`} alt="User" />
+                      <img
+                        src={`https://api.dicebear.com/7.x/identicon/svg?seed=user${i + (project.id === 'p1' ? 10 : 20)}`}
+                        alt="User"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = `https://ui-avatars.com/api/?name=User+${i}&background=random`;
+                        }}
+                      />
                     </div>
                   ))}
                   <div className="w-6 h-6 rounded-full border-2 border-slate-900 bg-slate-800 flex items-center justify-center text-[8px] font-bold text-slate-400">
                     +5
                   </div>
                 </div>
-                <button
-                  onClick={() => setActiveTab(NavTab.NEXUS)}
-                  className="flex items-center gap-1.5 text-xs font-bold text-cyan-400 hover:text-cyan-300 transition-colors"
-                >
-                  Configure <ExternalLink size={14} />
-                </button>
+
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => handleOpenProject(project)}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-cyan-500 text-slate-950 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-cyan-400 active:scale-95 transition-all shadow-lg shadow-cyan-500/20"
+                  >
+                    Select Project
+                  </button>
+                  <button
+                    onClick={() => handleOpenProject(project)}
+                    className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 hover:text-cyan-400 transition-colors uppercase tracking-wider"
+                  >
+                    Configure <ExternalLink size={12} />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -244,6 +408,84 @@ const Projects: React.FC<ProjectsProps> = ({ setActiveTab }) => {
           </div>
         )}
       </div>
+
+      {/* New Project Modal */}
+      {showNewProjectModal && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center animate-in fade-in duration-300">
+          <div className="bg-slate-900/95 border border-cyan-500/20 rounded-3xl max-w-xl w-full mx-4 overflow-hidden shadow-2xl shadow-cyan-500/10">
+            {/* Header */}
+            <div className="p-6 border-b border-white/5 bg-gradient-to-r from-cyan-500/5 to-purple-500/5 flex items-center justify-between">
+              <div>
+                <h3 className="text-xl font-black text-white">Create New Project</h3>
+                <p className="text-xs text-slate-500 mt-1">Choose a template to get started</p>
+              </div>
+              <button
+                onClick={() => setShowNewProjectModal(false)}
+                className="w-10 h-10 bg-slate-800 rounded-xl flex items-center justify-center hover:bg-slate-700 transition-all"
+              >
+                <X size={18} className="text-white" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-6">
+              {/* Project Name */}
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2">Project Name</label>
+                <input
+                  type="text"
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                  placeholder="My Awesome Game"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-500/50 transition-all"
+                  autoFocus
+                />
+              </div>
+
+              {/* Template Selection */}
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-3">Game Template</label>
+                <div className="grid grid-cols-2 gap-3">
+                  {PROJECT_TEMPLATES.map((template) => (
+                    <button
+                      key={template.id}
+                      onClick={() => setSelectedTemplate(template.id)}
+                      className={`p-4 rounded-2xl border-2 transition-all text-left ${selectedTemplate === template.id
+                        ? template.activeClass
+                        : 'border-slate-800 bg-slate-800/50 hover:border-slate-600'
+                        }`}
+                    >
+                      <div className={`w-10 h-10 rounded-xl ${template.iconBg} flex items-center justify-center mb-3`}>
+                        <template.icon size={20} className={template.iconColor} />
+                      </div>
+                      <h4 className="font-bold text-white text-sm">{template.name}</h4>
+                      <p className="text-[10px] text-slate-500 mt-1">{template.desc}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-6 border-t border-white/5 bg-slate-950/50 flex gap-3">
+              <button
+                onClick={() => setShowNewProjectModal(false)}
+                className="flex-1 py-3 bg-slate-800 border border-slate-700 rounded-xl text-sm font-bold text-slate-400 hover:text-white transition-all"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateProject}
+                disabled={!newProjectName.trim()}
+                className="flex-1 py-3 bg-cyan-500 text-slate-950 rounded-xl text-sm font-black hover:bg-cyan-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                <Plus size={18} strokeWidth={3} />
+                Create Project
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

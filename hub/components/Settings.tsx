@@ -1,6 +1,12 @@
 
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Monitor, Cpu, Globe, Shield, Save, RefreshCw, Key, Eye, EyeOff, CheckCircle, Sparkles } from 'lucide-react';
+import { Settings as SettingsIcon, Monitor, Cpu, Globe, Shield, Save, RefreshCw, Key, Eye, EyeOff, CheckCircle, Sparkles, Bot, Loader2, AlertCircle } from 'lucide-react';
+
+interface OllamaModel {
+  name: string;
+  size: number;
+  modified_at: string;
+}
 
 const Settings: React.FC = () => {
   const [apiKeyInput, setApiKeyInput] = useState('');
@@ -11,6 +17,12 @@ const Settings: React.FC = () => {
   // Toggle States
   const [hardwareAcceleration, setHardwareAcceleration] = useState(true);
   const [autoSyncNexus, setAutoSyncNexus] = useState(false);
+
+  // Ollama States
+  const [ollamaModels, setOllamaModels] = useState<OllamaModel[]>([]);
+  const [selectedOllamaModel, setSelectedOllamaModel] = useState<string>('');
+  const [ollamaStatus, setOllamaStatus] = useState<'idle' | 'detecting' | 'connected' | 'error'>('idle');
+  const [ollamaEnabled, setOllamaEnabled] = useState(false);
 
   // Load settings from localStorage on mount
   useEffect(() => {
@@ -30,7 +42,45 @@ const Settings: React.FC = () => {
     if (storedAutoSync !== null) {
       setAutoSyncNexus(storedAutoSync === 'true');
     }
+
+    // Load Ollama settings
+    const storedOllamaEnabled = localStorage.getItem('nexgen_ollama_enabled');
+    const storedOllamaModel = localStorage.getItem('nexgen_ollama_model');
+    if (storedOllamaEnabled === 'true') {
+      setOllamaEnabled(true);
+      if (storedOllamaModel) setSelectedOllamaModel(storedOllamaModel);
+    }
   }, []);
+
+  // Detect Ollama models
+  const detectOllamaModels = async () => {
+    setOllamaStatus('detecting');
+    try {
+      const response = await fetch('http://localhost:11434/api/tags', {
+        method: 'GET',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setOllamaModels(data.models || []);
+        setOllamaStatus('connected');
+        if (data.models?.length > 0 && !selectedOllamaModel) {
+          setSelectedOllamaModel(data.models[0].name);
+        }
+      } else {
+        setOllamaStatus('error');
+      }
+    } catch (e) {
+      console.error('Ollama detection failed:', e);
+      setOllamaStatus('error');
+    }
+  };
+
+  // Auto-detect on enable
+  useEffect(() => {
+    if (ollamaEnabled && ollamaStatus === 'idle') {
+      detectOllamaModels();
+    }
+  }, [ollamaEnabled]);
 
   const handleSaveSettings = () => {
     // Save API Key
@@ -43,6 +93,12 @@ const Settings: React.FC = () => {
     // Save toggle settings
     localStorage.setItem('nexgen_hardware_acceleration', String(hardwareAcceleration));
     localStorage.setItem('nexgen_auto_sync', String(autoSyncNexus));
+
+    // Save Ollama settings
+    localStorage.setItem('nexgen_ollama_enabled', String(ollamaEnabled));
+    localStorage.setItem('nexgen_ollama_model', selectedOllamaModel);
+    (window as any).__NEXGEN_OLLAMA_ENABLED__ = ollamaEnabled;
+    (window as any).__NEXGEN_OLLAMA_MODEL__ = selectedOllamaModel;
 
     // Update global flags for runtime access
     (window as any).__NEXGEN_HW_ACCEL__ = hardwareAcceleration;
@@ -80,7 +136,7 @@ const Settings: React.FC = () => {
             <Sparkles className="text-purple-400" size={20} />
             <h3 className="text-lg font-bold uppercase tracking-widest text-slate-200">AI Configuration</h3>
           </div>
-          <div className="space-y-4">
+          <div className="space-y-6">
             <div className="flex flex-col gap-2">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-tighter flex items-center gap-2">
                 <Key size={12} /> Gemini API Key
@@ -107,16 +163,132 @@ const Settings: React.FC = () => {
                 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline">
                   Google AI Studio
                 </a>
-                . This key enables AI features like sprite generation, audio synthesis, and the AI assistant.
               </p>
               {savedApiKey && (
-                <div className="flex items-center gap-2 mt-2">
+                <div className="flex items-center gap-2 mt-1">
                   <CheckCircle size={14} className="text-emerald-400" />
                   <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">API Key Configured</span>
                 </div>
               )}
             </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-purple-500/10">
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-tighter flex items-center gap-2">
+                  <Monitor size={12} /> USD Budget Limit ($)
+                </label>
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500 text-sm">$</span>
+                  <input
+                    type="number"
+                    step="0.01"
+                    defaultValue={localStorage.getItem('nexgen_neural_usage') ? JSON.parse(localStorage.getItem('nexgen_neural_usage')!).usdBudgetLimit : 0}
+                    onChange={(e) => {
+                      const usageData = localStorage.getItem('nexgen_neural_usage') || '{"totalTokens":0,"estimatedCost":0,"usdBudgetLimit":0}';
+                      const usage = JSON.parse(usageData);
+                      usage.usdBudgetLimit = parseFloat(e.target.value) || 0;
+                      localStorage.setItem('nexgen_neural_usage', JSON.stringify(usage));
+                    }}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs font-mono text-slate-400 focus:outline-none focus:border-purple-500/50"
+                    placeholder="0.00 = Unlimited"
+                  />
+                </div>
+                <p className="text-[9px] text-slate-500 mt-1 uppercase font-bold tracking-tighter">
+                  Set to 0.00 for no limit. Safety block triggers when burn reaches limit.
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 justify-end">
+                <button
+                  onClick={() => {
+                    if (confirm('Reset all session usage stats and budget burn?')) {
+                      localStorage.setItem('nexgen_neural_usage', JSON.stringify({ totalTokens: 0, estimatedCost: 0, usdBudgetLimit: 0 }));
+                      window.location.reload();
+                    }
+                  }}
+                  className="px-4 py-2.5 bg-pink-500/10 border border-pink-500/30 rounded-xl text-[10px] font-black text-pink-400 hover:bg-pink-500/20 transition-all uppercase tracking-widest flex items-center justify-center gap-2"
+                >
+                  <RefreshCw size={14} /> Reset Neural Pulse
+                </button>
+              </div>
+            </div>
           </div>
+        </section>
+
+        {/* Ollama Local AI Section */}
+        <section className="glass-panel p-8 rounded-3xl border border-cyan-500/20 bg-cyan-500/5 space-y-6">
+          <div className="flex items-center justify-between border-b border-cyan-500/20 pb-4">
+            <div className="flex items-center gap-3">
+              <Bot className="text-cyan-400" size={20} />
+              <h3 className="text-lg font-bold uppercase tracking-widest text-slate-200">Local AI (Ollama)</h3>
+            </div>
+            <button
+              onClick={() => setOllamaEnabled(!ollamaEnabled)}
+              className={`relative w-12 h-6 rounded-full transition-all ${ollamaEnabled ? 'bg-cyan-500' : 'bg-slate-700'}`}
+            >
+              <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all ${ollamaEnabled ? 'left-6' : 'left-0.5'}`} />
+            </button>
+          </div>
+
+          {ollamaEnabled && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className={`w-2 h-2 rounded-full ${ollamaStatus === 'connected' ? 'bg-emerald-500 animate-pulse' :
+                  ollamaStatus === 'detecting' ? 'bg-amber-500 animate-pulse' :
+                    ollamaStatus === 'error' ? 'bg-red-500' : 'bg-slate-600'
+                  }`} />
+                <span className="text-xs text-slate-400">
+                  {ollamaStatus === 'connected' && `Connected - ${ollamaModels.length} models found`}
+                  {ollamaStatus === 'detecting' && 'Detecting Ollama...'}
+                  {ollamaStatus === 'error' && 'Ollama not running (start with: ollama serve)'}
+                  {ollamaStatus === 'idle' && 'Not connected'}
+                </span>
+                <button
+                  onClick={detectOllamaModels}
+                  disabled={ollamaStatus === 'detecting'}
+                  className="ml-auto px-3 py-1 bg-cyan-500/10 border border-cyan-500/30 rounded-lg text-[10px] font-bold text-cyan-400 hover:bg-cyan-500/20 transition-all flex items-center gap-2 disabled:opacity-50"
+                >
+                  {ollamaStatus === 'detecting' ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                  Detect
+                </button>
+              </div>
+
+              {ollamaModels.length > 0 && (
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-tighter">Select Model</label>
+                  <select
+                    value={selectedOllamaModel}
+                    onChange={(e) => setSelectedOllamaModel(e.target.value)}
+                    className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-300 focus:outline-none focus:border-cyan-500/50"
+                  >
+                    {ollamaModels.map((model) => (
+                      <option key={model.name} value={model.name}>
+                        {model.name} ({(model.size / 1e9).toFixed(1)}GB)
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-[10px] text-slate-600">
+                    Used for code generation to save Gemini API tokens. Recommended: codellama, deepseek-coder, qwen2.5-coder
+                  </p>
+                </div>
+              )}
+
+              {ollamaStatus === 'error' && (
+                <div className="flex items-center gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+                  <AlertCircle size={14} className="text-red-400" />
+                  <p className="text-[10px] text-red-400">
+                    Make sure Ollama is installed and running. Run <code className="bg-red-500/20 px-1 rounded">ollama serve</code> in a terminal.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {!ollamaEnabled && (
+            <p className="text-[10px] text-slate-600">
+              Enable to use local AI models for code generation (saves Gemini API tokens). Requires{' '}
+              <a href="https://ollama.ai" target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:underline">Ollama</a> installed locally.
+            </p>
+          )}
         </section>
 
         {/* Engine Paths Section */}
@@ -201,8 +373,8 @@ const Settings: React.FC = () => {
             {saveStatus === 'saved' ? 'Saved!' : 'Save Configurations'}
           </button>
         </div>
-      </div>
-    </div>
+      </div >
+    </div >
   );
 };
 
