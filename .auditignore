@@ -1,0 +1,28 @@
+# AuditAI Ignore File
+# Files and directories that should be EXCLUDED from product audits
+# These are developer tooling, not product code
+
+# Conduit VS Code Extension (AI Agent Workflow Manager)
+agent_bridge.js
+.conduit/
+.agent/
+conduit/
+
+# IDE and Editor Config
+.vscode/
+.idea/
+
+# Package Managers
+node_modules/
+target/
+
+# Build Artifacts
+dist/
+build/
+.next/
+
+# Git
+.git/
+
+# Documentation (not product code)
+CONDUIT_README.md

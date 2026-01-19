@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "NexGen-Framework/nexgen-core",
+    "NexGen-Framework/nexgen-plugin-api",
+    "NexGen-Engine/nexscript",
+]
+resolver = "2"
